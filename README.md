@@ -100,9 +100,27 @@ If you deploy the following persistence.xml:
     } catch (Exception e) {
       utx.rollback();
     }
+    
+* Another example with resource local.
+**persistence.xml**
+
+        <persistence xmlns="http://java.sun.com/xml/ns/persistence" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+        xsi:schemaLocation="http://java.sun.com/xml/ns/persistence persistence_1_0.xsd" version="1.0">
+            <persistence-unit name="acme" transaction-type="RESOURCE_LOCAL">
+                <non-jta-data-source>amce</non-jta-data-source>
+            </persistence-unit>
+        </persistence>
+
+The transaction:
+
+        EntityManager em = createEntityManager();
+        em.getTransaction().begin();
+        Employee employee = em.find(Employee.class, id);
+        employee.setSalary(employee.getSalary() + 1000);
+        em.getTransaction().commit();
+        em.close();
 
 Instead of **RESOURCE_LOCAL**, you should use the **JTA** setting in production. With the JTA setting you don't have to specify the JDBC-connection and use a pre-configured JTA data source (usually a JNDI in the Wildfly, Glassfish) instead: 
-
 
     <persistence>
       <persistence-unit name="prod" transaction-type="JTA">
@@ -120,8 +138,25 @@ component:
     @PersistenceContext
     EntityManager em;
 
-
 This way the Container(Web Server) EntityManager instance's persistence context is automatically propagated by the container to all application components that use the EntityManager instance within a single JTA (Java Transaction API) transaction.
+
+*Example with JTA resource: 
+persistence.xml
+        <persistence xmlns="http://java.sun.com/xml/ns/persistence" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://java.sun.com/xml/ns/persistence persistence_1_0.xsd" version="1.0">
+            <persistence-unit name="acme" transaction-type="JTA">
+                <jta-data-source>acme</jta-data-source>
+            </persistence-unit>
+        </persistence>
+
+The transaction:
+
+        UserTransaction transaction = (UserTransaction)new InitialContext().lookup("java:comp/UserTransaction");
+        transaction.begin();
+        EntityManager em = getEntityManager();
+        Employee employee = em.find(Employee.class, id);
+        employee.setSalary(employee.getSalary() + 1000);
+        transaction.commit();
+
 
 
 
