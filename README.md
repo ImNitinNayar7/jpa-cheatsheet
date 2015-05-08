@@ -1,5 +1,4 @@
-
-#####Entity Transient fields:
+###Entity Transient fields:
 All fields not annotated **javax.persistence.Transient** will be persisted to the data store.
 
     //This field will not be persisted in Database
@@ -8,7 +7,9 @@ All fields not annotated **javax.persistence.Transient** will be persisted to th
     
 This has a semantic difference from the keyword **transient**.  The **@Transient** annotation tells the JPA provider to not persist any (non-transient) attribute. The other tells the serialization framework to not serialize an attribute. You might want to have a @Transient property and still serialize it.
 
-#####Bean Validation:
+
+
+###Bean Validation:
 Constraints applied to an Entity in its persistent fields(instance variables).
 
     @Entity
@@ -54,7 +55,8 @@ The homePhone and mobilePhone fields have the same @Pattern constraints. The reg
 
 The birthday field is annotated with the @Past constraint, which ensures that the value of birthday must be in the past.
 
-#####EntityManager Interface
+
+###EntityManager Interface
 The EntityManager API **creates** and **removes** persistent entity instances, **finds** entities
 by the entity's primary key, and allows queries to be run on entities.
 
@@ -120,3 +122,136 @@ component:
 
 
 This way the Container(Web Server) EntityManager instance's persistence context is automatically propagated by the container to all application components that use the EntityManager instance within a single JTA (Java Transaction API) transaction.
+
+
+
+###CRUD Operations
+
+##### Persisting Entity Instances (CREATE)
+
+The following method performs a persist operation:
+
+        @PersistenceContext
+        EntityManager em;
+        //...
+        public LineItem createLineItem(CustomerOrder order, Product product, int quantity) {
+            
+            LineItem li = new LineItem(order, product, quantity);
+            order.getLineItems().add(li);
+            em.persist(li);
+            return li;
+        }     
+
+The persist operation is propagated to all entities related to the calling entity that
+have the cascade element set to ALL or PERSIST in the relationship annotation:
+        
+        @OneToMany(cascade=ALL, mappedBy="order")
+        public Collection<LineItem> getLineItems() {
+            return lineItems;
+        }
+
+
+
+##### Finding Entity Instances (READ)
+The EntityManager.find method is used to look up entities in the data store by the
+entity's **primary key**:
+
+    @PersistenceContext
+    EntityManager em;
+    
+    public void enterOrder(int custID, CustomerOrder newOrder) {
+        Customer cust = em.find(Customer.class, custID);
+        cust.getOrders().add(newOrder);
+        newOrder.setCustomer(cust);
+    }
+
+##### UPDATE Entity Instances
+    em.merge();
+
+##### DELETE Entity Instances
+In the following example, all LineItem entities associated with the order are also
+removed, as CustomerOrder.getLineItems has cascade=ALL set in the relationship
+annotation:
+        public void removeOrder(Integer orderId) {
+            try {
+                CustomerOrder order = em.find(CustomerOrder.class, orderId);
+                em.remove(order);
+            }catch...
+
+
+
+###Persistence Units
+A persistence unit defines a set of all entity classes that are managed by EntityManager instances in an application. This set of entity classes represents the data contained within a single data store.
+
+Persistence units are defined by the persistence.xml configuration file. The following is an example persistence.xml file:
+
+        <persistence>
+            <persistence-unit name="OrderManagement">
+                <description>This unit manages orders and customers. It does not rely on any 
+                     vendor-specific features and can therefore be deployed to any persistence provider.
+                </description>
+                <jta-data-source>jdbc/MyOrderDB</jta-data-source>
+                <jar-file>MyOrderApp.jar</jar-file>
+                <class>com.widgets.CustomerOrder</class>
+                <class>com.widgets.Customer</class>
+            </persistence-unit>
+        </persistence>
+
+The jta-data-source (for JTA-aware data sources) and non-jta-data-source (for non-JTA-aware data sources) 
+elements specify the global JNDI name of the data source to be used by the container.
+
+Persistent units can be packaged as part of a WAR or EJB JAR file or can be packaged
+as a JAR file that can then be included in an WAR or EAR file.
+*  If you package the persistent unit as a set of classes in an EJB JAR file,
+persistence.xml should be put in the EJB JAR's META-INF directory.
+* If you package the persistence unit as a set of classes in a WAR file,
+persistence.xml should be located in the WAR file's WEB-INF/classes/META-INF
+directory.
+* If you package the persistence unit in a JAR file that will be included in a WAR or
+EAR file, the JAR file should be located in either
+   *  The WEB-INF/lib directory of a WAR
+   *  Or the EAR file's library directory
+
+###  Schema Creation
+The persistence provider can be configured to automatically create the database tables,
+load data into the tables, and remove the tables during application deployment using
+standard properties in the application's deployment descriptor. **These tasks are
+typically used during the development phase of a release, not against a production
+database.**
+
+The following is an example of a persistence.xml deployment descriptor that
+specifies that the provider should drop all database artifacts using a provided script,
+create the artifacts with a provided script, and load data from a provided script when
+the application is deployed:
+
+    <?xml version="1.0" encoding="UTF-8"?>
+    <persistence version="2.1" xmlns="http://xmlns.jcp.org/xml/ns/persistence"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://xmlns.jcp.org/xml/ns/persistence
+    http://xmlns.jcp.org/xml/ns/persistence/persistence_2_1.xsd">
+        <persistence-unit name="examplePU" transaction-type="JTA">
+            <jta-data-source>java:global/ExampleDataSource</jta-data-source>
+            <properties>
+                <property name="javax.persistence.schema-generation.database.action"
+                value="drop-and-create"/>
+                <property name="javax.persistence.schema-generation.create-source"
+                value="script"/>
+                <property name="javax.persistence.schema-generation.create-script-source"
+                value="META-INF/sql/create.sql" />
+                <property name="javax.persistence.sql-load-script-source"
+                value="META-INF/sql/data.sql" />
+                <property name="javax.persistence.schema-generation.drop-source"
+                value="script" />
+                <property name="javax.persistence.schema-generation.drop-script-source"
+                value="META-INF/sql/drop.sql" />
+            </properties>
+        </persistence-unit>
+    </persistence>
+
+| Setting          | Description                                                                    |
+| ---------------- |:------------------------------------------------------------------------------:|
+| create           | The provider will create the database artifacts on application deployment. The artifacts will remain unchanged after application redeployment.                                                    |
+| none             | No schema creation or deletion will take place                                 |
+| drop-and-create  |  Any artifacts in the database will be deleted, and the provider will create the database artifacts on deployment.                     |
+| drop             |  Any artifacts in the database will be deleted on application deployment.      |
+
