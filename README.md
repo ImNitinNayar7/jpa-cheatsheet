@@ -135,8 +135,8 @@ Instead of **RESOURCE_LOCAL**, you should use the **JTA** setting in production.
 To obtain an EntityManager instance, inject the entity manager into the application
 component:
 
-    @PersistenceContext
-    EntityManager em;
+        @PersistenceContext
+        EntityManager em;
 
 This way the Container(Web Server) EntityManager instance's persistence context is automatically propagated by the container to all application components that use the EntityManager instance within a single JTA (Java Transaction API) transaction.
 
@@ -201,12 +201,13 @@ entity's **primary key**:
     }
 
 ##### UPDATE Entity Instances
-    em.merge();
+        em.merge();
 
 ##### DELETE Entity Instances
 In the following example, all LineItem entities associated with the order are also
 removed, as CustomerOrder.getLineItems has cascade=ALL set in the relationship
 annotation:
+
         public void removeOrder(Integer orderId) {
             try {
                 CustomerOrder order = em.find(CustomerOrder.class, orderId);
@@ -259,29 +260,29 @@ specifies that the provider should drop all database artifacts using a provided 
 create the artifacts with a provided script, and load data from a provided script when
 the application is deployed:
 
-    <?xml version="1.0" encoding="UTF-8"?>
-    <persistence version="2.1" xmlns="http://xmlns.jcp.org/xml/ns/persistence"
-    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-    xsi:schemaLocation="http://xmlns.jcp.org/xml/ns/persistence
-    http://xmlns.jcp.org/xml/ns/persistence/persistence_2_1.xsd">
-        <persistence-unit name="examplePU" transaction-type="JTA">
-            <jta-data-source>java:global/ExampleDataSource</jta-data-source>
-            <properties>
-                <property name="javax.persistence.schema-generation.database.action"
-                value="drop-and-create"/>
-                <property name="javax.persistence.schema-generation.create-source"
-                value="script"/>
-                <property name="javax.persistence.schema-generation.create-script-source"
-                value="META-INF/sql/create.sql" />
-                <property name="javax.persistence.sql-load-script-source"
-                value="META-INF/sql/data.sql" />
-                <property name="javax.persistence.schema-generation.drop-source"
-                value="script" />
-                <property name="javax.persistence.schema-generation.drop-script-source"
-                value="META-INF/sql/drop.sql" />
-            </properties>
-        </persistence-unit>
-    </persistence>
+        <?xml version="1.0" encoding="UTF-8"?>
+        <persistence version="2.1" xmlns="http://xmlns.jcp.org/xml/ns/persistence"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://xmlns.jcp.org/xml/ns/persistence
+        http://xmlns.jcp.org/xml/ns/persistence/persistence_2_1.xsd">
+            <persistence-unit name="examplePU" transaction-type="JTA">
+                <jta-data-source>java:global/ExampleDataSource</jta-data-source>
+                <properties>
+                    <property name="javax.persistence.schema-generation.database.action"
+                    value="drop-and-create"/>
+                    <property name="javax.persistence.schema-generation.create-source"
+                    value="script"/>
+                    <property name="javax.persistence.schema-generation.create-script-source"
+                    value="META-INF/sql/create.sql" />
+                    <property name="javax.persistence.sql-load-script-source"
+                    value="META-INF/sql/data.sql" />
+                    <property name="javax.persistence.schema-generation.drop-source"
+                    value="script" />
+                    <property name="javax.persistence.schema-generation.drop-script-source"
+                    value="META-INF/sql/drop.sql" />
+                </properties>
+            </persistence-unit>
+        </persistence>
 
 | Setting          | Description                                                                    |
 | ---------------- |:------------------------------------------------------------------------------:|
