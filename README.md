@@ -1,60 +1,129 @@
-###Entity Transient fields:
-All fields not annotated **javax.persistence.Transient** will be persisted to the data store.
+#[JPA 101](http://tomee.apache.org/jpa-concepts.html) 
 
-    //This field will not be persisted in Database
-    @Transient 
-    private int example; 
+If there's one thing you have to understand to successfully use JPA (Java Persistence API) it's the concept of a Cache. Almost everything boils down to the Cache at one point or another. Unfortunately the Cache is an internal thing and not exposed via the JPA API classes, so it not easy to touch or feel from a coding perspective.
+
+Here's a quick cheat sheet of the JPA world:
+
+* A Cache is a copy of data, copy meaning pulled from but living outside the database.
+* Flushing a Cache is the act of putting modified data back into the database.
+* A PersistenceContext is essentially a Cache. It also tends to have it's own non-shared database connection.
+* An EntityManager represents a PersistenceContext (and therefore a Cache)
+* An EntityManagerFactory creates an EntityManager (and therefore a PersistenceContext/Cache)
+
+###Comparing RESOURCE_LOCAL and JTA persistence contexts
+
+With <persistence-unit transaction-type="RESOURCE_LOCAL"> you are responsible for EntityManager (PersistenceContext/Cache) creating and tracking...
+
+* You must use the EntityManagerFactory to get an EntityManager
+* The resulting EntityManager instance is a PersistenceContext/Cache
+* An EntityManagerFactory can be injected via the **@PersistenceUnit** annotation only (**NOT @PersistenceContext**)
+* You are not allowed to use @PersistenceContext to refer to a unit of type RESOURCE_LOCAL
+* You must use the **EntityTransaction** API to **begin/commit** around every call to your EntityManger
+* Calling entityManagerFactory.createEntityManager() twice results in two separate EntityManager instances and therefor two separate PersistenceContexts/Caches.
+* It is almost never a good idea to have more than one instance of an EntityManager in use (don't create a second one unless you've destroyed the first)
+
+With <persistence-unit transaction-type="JTA"> the container will do EntityManager (PersistenceContext/Cache) creating and tracking...
+
+* You can **NOT use the EntityManagerFactory** to get an **EntityManager**
+* You can only get an EntityManager supplied by the container
+* An EntityManager can be injected via the @PersistenceContext annotation only (not @PersistenceUnit)
+* You are not allowed to use @PersistenceUnit to refer to a unit of type JTA
+* The EntityManager given by the container is a reference to the PersistenceContext/Cache associated with a JTA Transaction.
+* If no JTA transaction is in progress, the EntityManager cannot be used because there is no PersistenceContext/Cache.
+* Everyone with an EntityManager reference to the same unit in the same transaction will automatically have a reference to the same PersistenceContext/Cache
+* The PersistenceContext/Cache is flushed and cleared at JTA commit time
+
+###Valid RESOURCE_LOCAL Unit usage
+
+Servlets and EJBs can use RESOURCE_LOCAL persistence units through the EntityManagerFactory as follows:
+
+        <?xml version="1.0" encoding="UTF-8" ?>
+        <persistence xmlns="http://java.sun.com/xml/ns/persistence" version="1.0">
+        
+          <!-- Tutorial "unit" -->
+          <persistence-unit name="Tutorial" transaction-type="RESOURCE_LOCAL">
+            <non-jta-data-source>myNonJtaDataSource</non-jta-data-source>
+            <class>org.superbiz.jpa.Account</class>
+          </persistence-unit>
+        
+        </persistence>
+
+And referenced as follows
+
+        import javax.persistence.EntityManagerFactory;
+        import javax.persistence.EntityManager;
+        import javax.persistence.EntityTransaction;
+        import javax.persistence.PersistenceUnit;
+        
+        public class MyEjbOrServlet ... {
+        
+            @PersistenceUnit(unitName="Tutorial")
+            private EntityManagerFactory factory;
+        
+            // Proper exception handling left out for simplicity
+            public void ejbMethodOrServletServiceMethod() throws Exception {
+                EntityManager entityManager = factory.createEntityManager();
+        
+                EntityTransaction entityTransaction = entityManager.getTransaction();
+        
+                entityTransaction.begin();
+        
+                Account account = entityManager.find(Account.class, 12345);
+        
+                account.setBalance(5000);
+        
+                entityTransaction.commit();
+            }
+            ...
+        }
+
+###Valid JTA Unit usage:
+
+EJBs can use JTA persistence units through the EntityManager as follows:
+
+        <?xml version="1.0" encoding="UTF-8" ?>
+        <persistence xmlns="http://java.sun.com/xml/ns/persistence" version="1.0">
+        
+          <!-- Tutorial "unit" -->
+          <persistence-unit name="Tutorial" transaction-type="JTA">
+            <jta-data-source>myJtaDataSource</jta-data-source>
+            <non-jta-data-source>myNonJtaDataSource</non-jta-data-source>
+            <class>org.superbiz.jpa.Account</class>
+          </persistence-unit>
+        
+        </persistence>
     
-This has a semantic difference from the keyword **transient**.  The **@Transient** annotation tells the JPA provider to not persist any (non-transient) attribute. The other tells the serialization framework to not serialize an attribute. You might want to have a @Transient property and still serialize it.
+    
+And referenced as follows:
+    
+        
+        import javax.ejb.Stateless;
+        import javax.ejb.TransactionAttribute;
+        import javax.ejb.TransactionAttributeType;
+        import javax.persistence.EntityManager;
+        import javax.persistence.PersistenceContext;
+        
+        @Stateless
+        public class MyEjb implements MyEjbInterface {
+        
+            @PersistenceContext(unitName = "Tutorial")
+            private EntityManager entityManager;
+        
+            // Proper exception handling left out for simplicity
+            @TransactionAttribute(TransactionAttributeType.REQUIRED)
+            public void ejbMethod() throws Exception {
+        
+            Account account = entityManager.find(Account.class, 12345);
+        
+            account.setBalance(5000);
+        
+            }
+        }
 
 
+*
 
-###Bean Validation:
-Constraints applied to an Entity in its persistent fields(instance variables).
-
-    @Entity
-    public class Contact implements Serializable {
-    
-    private static final long serialVersionUID = 1L;
-    
-    @Id
-    @GeneratedValue(strategy = GenerationType.AUTO)
-    private Long id;
-    
-    @NotNull
-    protected String firstName;
-    
-    @NotNull
-    protected String lastName;
-    
-    @Pattern(regexp="[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\\."
-        +"[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@"
-        +"(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?",
-             message="{invalid.email}")
-    protected String email;
-    
-    @Pattern(regexp="^\\(?(\\d{3})\\)?[- ]?(\\d{3})[- ]?(\\d{4})$",
-             message="{invalid.phonenumber}")
-    protected String mobilePhone;
-    
-    @Pattern(regexp="^\\(?(\\d{3})\\)?[- ]?(\\d{3})[- ]?(\\d{4})$",
-             message="{invalid.phonenumber}")
-    protected String homePhone;
-    
-    @Temporal(javax.persistence.TemporalType.DATE)
-    @Past
-    protected Date birthday;
-    //...
-    }
-    
-The @NotNull annotation on the firstName and lastName fields specifies that those fields are now required. If a new Contact instance is created where firstName or lastName have not been initialized, Bean Validation will **throw a validation error** (. Similarly, if a previously created instance of Contact has been modified so that firstName or lastName are null, a validation error will be thrown.
-
-The email field has a @Pattern constraint applied to it, with a complicated regular expression that matches most valid email addresses. If the value of email doesn’t match this regular expression, a validation error will be thrown.
-
-The homePhone and mobilePhone fields have the same @Pattern constraints. The regular expression matches 10 digit telephone numbers in the United States and Canada of the form (xxx) xxx–xxxx.
-
-The birthday field is annotated with the @Past constraint, which ensures that the value of birthday must be in the past.
-
+____________________________________
 
 ###EntityManager Interface
 The EntityManager API **creates** and **removes** persistent entity instances, **finds** entities
@@ -159,6 +228,63 @@ The transaction:
 
 
 
+
+###Entity Transient fields:
+All fields not annotated **javax.persistence.Transient** will be persisted to the data store.
+
+    //This field will not be persisted in Database
+    @Transient 
+    private int example; 
+    
+This has a semantic difference from the keyword **transient**.  The **@Transient** annotation tells the JPA provider to not persist any (non-transient) attribute. The other tells the serialization framework to not serialize an attribute. You might want to have a @Transient property and still serialize it.
+
+
+
+###Bean Validation:
+Constraints applied to an Entity in its persistent fields(instance variables).
+
+    @Entity
+    public class Contact implements Serializable {
+    
+    private static final long serialVersionUID = 1L;
+    
+    @Id
+    @GeneratedValue(strategy = GenerationType.AUTO)
+    private Long id;
+    
+    @NotNull
+    protected String firstName;
+    
+    @NotNull
+    protected String lastName;
+    
+    @Pattern(regexp="[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\\."
+        +"[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@"
+        +"(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?",
+             message="{invalid.email}")
+    protected String email;
+    
+    @Pattern(regexp="^\\(?(\\d{3})\\)?[- ]?(\\d{3})[- ]?(\\d{4})$",
+             message="{invalid.phonenumber}")
+    protected String mobilePhone;
+    
+    @Pattern(regexp="^\\(?(\\d{3})\\)?[- ]?(\\d{3})[- ]?(\\d{4})$",
+             message="{invalid.phonenumber}")
+    protected String homePhone;
+    
+    @Temporal(javax.persistence.TemporalType.DATE)
+    @Past
+    protected Date birthday;
+    //...
+    }
+    
+The @NotNull annotation on the firstName and lastName fields specifies that those fields are now required. If a new Contact instance is created where firstName or lastName have not been initialized, Bean Validation will **throw a validation error** (. Similarly, if a previously created instance of Contact has been modified so that firstName or lastName are null, a validation error will be thrown.
+
+The email field has a @Pattern constraint applied to it, with a complicated regular expression that matches most valid email addresses. If the value of email doesn’t match this regular expression, a validation error will be thrown.
+
+The homePhone and mobilePhone fields have the same @Pattern constraints. The regular expression matches 10 digit telephone numbers in the United States and Canada of the form (xxx) xxx–xxxx.
+
+The birthday field is annotated with the @Past constraint, which ensures that the value of birthday must be in the past.
 
 ###CRUD Operations
 
